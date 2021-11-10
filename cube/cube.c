@@ -300,7 +300,6 @@ typedef struct {
     VkBuffer uniform_buffer;
     VkDeviceMemory uniform_memory;
     void *uniform_memory_ptr;
-    VkFramebuffer framebuffer;
     VkDescriptorSet descriptor_set;
 } SwapchainImageResources;
 
@@ -397,6 +396,8 @@ struct demo {
     PFN_vkQueuePresentKHR fpQueuePresentKHR;
     PFN_vkGetRefreshCycleDurationGOOGLE fpGetRefreshCycleDurationGOOGLE;
     PFN_vkGetPastPresentationTimingGOOGLE fpGetPastPresentationTimingGOOGLE;
+    PFN_vkCmdBeginRenderingKHR fpCmdBeginRenderingKHR;
+    PFN_vkCmdEndRenderingKHR fpCmdEndRenderingKHR;
     uint32_t swapchainImageCount;
     VkSwapchainKHR swapchain;
     SwapchainImageResources *swapchain_image_resources;
@@ -423,7 +424,6 @@ struct demo {
     VkPipelineLayout pipeline_layout;
     VkDescriptorSetLayout desc_layout;
     VkPipelineCache pipelineCache;
-    VkRenderPass render_pass;
     VkPipeline pipeline;
 
     mat4x4 projection_matrix;
@@ -719,22 +719,6 @@ static void demo_draw_build_cmd(struct demo *demo, VkCommandBuffer cmd_buf) {
         .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
         .pInheritanceInfo = NULL,
     };
-    const VkClearValue clear_values[2] = {
-        [0] = {.color.float32 = {0.2f, 0.2f, 0.2f, 0.2f}},
-        [1] = {.depthStencil = {1.0f, 0}},
-    };
-    const VkRenderPassBeginInfo rp_begin = {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .pNext = NULL,
-        .renderPass = demo->render_pass,
-        .framebuffer = demo->swapchain_image_resources[demo->current_buffer].framebuffer,
-        .renderArea.offset.x = 0,
-        .renderArea.offset.y = 0,
-        .renderArea.extent.width = demo->width,
-        .renderArea.extent.height = demo->height,
-        .clearValueCount = 2,
-        .pClearValues = clear_values,
-    };
     VkResult U_ASSERT_ONLY err;
 
     err = vkBeginCommandBuffer(cmd_buf, &cmd_buf_info);
@@ -761,7 +745,62 @@ static void demo_draw_build_cmd(struct demo *demo, VkCommandBuffer cmd_buf) {
     }
 
     assert(!err);
-    vkCmdBeginRenderPass(cmd_buf, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+
+    VkImageMemoryBarrier begin_depth_transition = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .pNext = NULL,
+        .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = demo->depth.image,
+        .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
+    vkCmdPipelineBarrier(cmd_buf, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0, NULL, 0,
+                         NULL, 1, &begin_depth_transition);
+
+    VkImageMemoryBarrier begin_color_transition = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .pNext = NULL,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = demo->swapchain_image_resources[demo->current_buffer].image,
+        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+    vkCmdPipelineBarrier(cmd_buf, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
+                         0, NULL, 0, NULL, 1, &begin_color_transition);
+
+    VkRenderingAttachmentInfoKHR color_attachment = {.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+                                                     .pNext = NULL,
+                                                     .imageView = demo->swapchain_image_resources[demo->current_buffer].view,
+                                                     .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR,
+                                                     .resolveMode = VK_RESOLVE_MODE_NONE,
+                                                     .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                                                     .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                                                     .clearValue = {.color = {.float32 = {0.2f, 0.2f, 0.2f, 0.2f}}}};
+    VkRenderingAttachmentInfoKHR depth_attachment = {.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+                                                     .pNext = NULL,
+                                                     .imageView = demo->depth.view,
+                                                     .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                                                     .resolveMode = VK_RESOLVE_MODE_NONE,
+                                                     .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                                                     .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                                                     .clearValue = {.depthStencil = {.depth = 1.0f, .stencil = 0}}};
+    VkRenderingInfoKHR rendering_info = {.sType = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR,
+                                         .pNext = NULL,
+                                         .flags = 0,
+                                         .renderArea = {.extent = {.width = demo->width, .height = demo->height}},
+                                         .layerCount = 1,
+                                         .colorAttachmentCount = 1,
+                                         .pColorAttachments = &color_attachment,
+                                         .pDepthAttachment = &depth_attachment,
+                                         .pStencilAttachment = &depth_attachment};
+    demo->fpCmdBeginRenderingKHR(cmd_buf, &rendering_info);
 
     if (demo->validate) {
         label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
@@ -819,7 +858,22 @@ static void demo_draw_build_cmd(struct demo *demo, VkCommandBuffer cmd_buf) {
 
     // Note that ending the renderpass changes the image's layout from
     // COLOR_ATTACHMENT_OPTIMAL to PRESENT_SRC_KHR
-    vkCmdEndRenderPass(cmd_buf);
+    demo->fpCmdEndRenderingKHR(cmd_buf);
+
+    VkImageMemoryBarrier end_color_transition = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .pNext = NULL,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = demo->swapchain_image_resources[demo->current_buffer].image,
+        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+    vkCmdPipelineBarrier(cmd_buf, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
+                         0, NULL, 0, NULL, 1, &end_color_transition);
+
     if (demo->validate) {
         demo->CmdEndDebugUtilsLabelEXT(cmd_buf);
     }
@@ -1864,104 +1918,6 @@ static void demo_prepare_descriptor_layout(struct demo *demo) {
     assert(!err);
 }
 
-static void demo_prepare_render_pass(struct demo *demo) {
-    // The initial layout for the color and depth attachments will be LAYOUT_UNDEFINED
-    // because at the start of the renderpass, we don't care about their contents.
-    // At the start of the subpass, the color attachment's layout will be transitioned
-    // to LAYOUT_COLOR_ATTACHMENT_OPTIMAL and the depth stencil attachment's layout
-    // will be transitioned to LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL.  At the end of
-    // the renderpass, the color attachment's layout will be transitioned to
-    // LAYOUT_PRESENT_SRC_KHR to be ready to present.  This is all done as part of
-    // the renderpass, no barriers are necessary.
-    const VkAttachmentDescription attachments[2] = {
-        [0] =
-            {
-                .format = demo->format,
-                .flags = 0,
-                .samples = VK_SAMPLE_COUNT_1_BIT,
-                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-                .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-            },
-        [1] =
-            {
-                .format = demo->depth.format,
-                .flags = 0,
-                .samples = VK_SAMPLE_COUNT_1_BIT,
-                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-                .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            },
-    };
-    const VkAttachmentReference color_reference = {
-        .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-    };
-    const VkAttachmentReference depth_reference = {
-        .attachment = 1,
-        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-    };
-    const VkSubpassDescription subpass = {
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .flags = 0,
-        .inputAttachmentCount = 0,
-        .pInputAttachments = NULL,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &color_reference,
-        .pResolveAttachments = NULL,
-        .pDepthStencilAttachment = &depth_reference,
-        .preserveAttachmentCount = 0,
-        .pPreserveAttachments = NULL,
-    };
-
-    VkSubpassDependency attachmentDependencies[2] = {
-        [0] =
-            {
-                // Depth buffer is shared between swapchain images
-                .srcSubpass = VK_SUBPASS_EXTERNAL,
-                .dstSubpass = 0,
-                .srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-                .dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-                .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                .dependencyFlags = 0,
-            },
-        [1] =
-            {
-                // Image Layout Transition
-                .srcSubpass = VK_SUBPASS_EXTERNAL,
-                .dstSubpass = 0,
-                .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                .srcAccessMask = 0,
-                .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
-                .dependencyFlags = 0,
-            },
-    };
-
-    const VkRenderPassCreateInfo rp_info = {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .pNext = NULL,
-        .flags = 0,
-        .attachmentCount = 2,
-        .pAttachments = attachments,
-        .subpassCount = 1,
-        .pSubpasses = &subpass,
-        .dependencyCount = 2,
-        .pDependencies = attachmentDependencies,
-    };
-    VkResult U_ASSERT_ONLY err;
-
-    err = vkCreateRenderPass(demo->device, &rp_info, NULL, &demo->render_pass);
-    assert(!err);
-}
-
 static VkShaderModule demo_prepare_shader_module(struct demo *demo, const uint32_t *code, size_t size) {
     VkShaderModule module;
     VkShaderModuleCreateInfo moduleCreateInfo;
@@ -2100,10 +2056,19 @@ static void demo_prepare_pipeline(struct demo *demo) {
     pipeline.pDepthStencilState = &ds;
     pipeline.stageCount = ARRAY_SIZE(shaderStages);
     pipeline.pStages = shaderStages;
-    pipeline.renderPass = demo->render_pass;
+    pipeline.renderPass = VK_NULL_HANDLE;
     pipeline.pDynamicState = &dynamicState;
 
-    pipeline.renderPass = demo->render_pass;
+    VkPipelineRenderingCreateInfoKHR pipeline_rendering = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
+        .pNext = NULL,
+        .colorAttachmentCount = 1,
+        .pColorAttachmentFormats = &demo->format,
+        .depthAttachmentFormat = demo->depth.format,
+        .stencilAttachmentFormat = demo->depth.format,
+        .viewMask = 0,
+    };
+    pipeline.pNext = &pipeline_rendering;
 
     err = vkCreateGraphicsPipelines(demo->device, demo->pipelineCache, 1, &pipeline, NULL, &demo->pipeline);
     assert(!err);
@@ -2183,30 +2148,6 @@ static void demo_prepare_descriptor_set(struct demo *demo) {
     }
 }
 
-static void demo_prepare_framebuffers(struct demo *demo) {
-    VkImageView attachments[2];
-    attachments[1] = demo->depth.view;
-
-    const VkFramebufferCreateInfo fb_info = {
-        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .pNext = NULL,
-        .renderPass = demo->render_pass,
-        .attachmentCount = 2,
-        .pAttachments = attachments,
-        .width = demo->width,
-        .height = demo->height,
-        .layers = 1,
-    };
-    VkResult U_ASSERT_ONLY err;
-    uint32_t i;
-
-    for (i = 0; i < demo->swapchainImageCount; i++) {
-        attachments[0] = demo->swapchain_image_resources[i].view;
-        err = vkCreateFramebuffer(demo->device, &fb_info, NULL, &demo->swapchain_image_resources[i].framebuffer);
-        assert(!err);
-    }
-}
-
 static void demo_prepare(struct demo *demo) {
     demo_prepare_buffers(demo);
 
@@ -2250,7 +2191,6 @@ static void demo_prepare(struct demo *demo) {
     demo_prepare_cube_data_buffers(demo);
 
     demo_prepare_descriptor_layout(demo);
-    demo_prepare_render_pass(demo);
     demo_prepare_pipeline(demo);
 
     for (uint32_t i = 0; i < demo->swapchainImageCount; i++) {
@@ -2284,8 +2224,6 @@ static void demo_prepare(struct demo *demo) {
 
     demo_prepare_descriptor_pool(demo);
     demo_prepare_descriptor_set(demo);
-
-    demo_prepare_framebuffers(demo);
 
     for (uint32_t i = 0; i < demo->swapchainImageCount; i++) {
         demo->current_buffer = i;
@@ -2324,14 +2262,10 @@ static void demo_cleanup(struct demo *demo) {
 
     // If the window is currently minimized, demo_resize has already done some cleanup for us.
     if (!demo->is_minimized) {
-        for (i = 0; i < demo->swapchainImageCount; i++) {
-            vkDestroyFramebuffer(demo->device, demo->swapchain_image_resources[i].framebuffer, NULL);
-        }
         vkDestroyDescriptorPool(demo->device, demo->desc_pool, NULL);
 
         vkDestroyPipeline(demo->device, demo->pipeline, NULL);
         vkDestroyPipelineCache(demo->device, demo->pipelineCache, NULL);
-        vkDestroyRenderPass(demo->device, demo->render_pass, NULL);
         vkDestroyPipelineLayout(demo->device, demo->pipeline_layout, NULL);
         vkDestroyDescriptorSetLayout(demo->device, demo->desc_layout, NULL);
 
@@ -2417,14 +2351,10 @@ static void demo_resize(struct demo *demo) {
     demo->prepared = false;
     vkDeviceWaitIdle(demo->device);
 
-    for (i = 0; i < demo->swapchainImageCount; i++) {
-        vkDestroyFramebuffer(demo->device, demo->swapchain_image_resources[i].framebuffer, NULL);
-    }
     vkDestroyDescriptorPool(demo->device, demo->desc_pool, NULL);
 
     vkDestroyPipeline(demo->device, demo->pipeline, NULL);
     vkDestroyPipelineCache(demo->device, demo->pipelineCache, NULL);
-    vkDestroyRenderPass(demo->device, demo->render_pass, NULL);
     vkDestroyPipelineLayout(demo->device, demo->pipeline_layout, NULL);
     vkDestroyDescriptorSetLayout(demo->device, demo->desc_layout, NULL);
 
@@ -3476,6 +3406,14 @@ static void demo_init_vk(struct demo *demo) {
             }
         }
 
+        for (uint32_t i = 0; i < device_extension_count; i++) {
+            if (!strcmp(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, device_extensions[i].extensionName)) {
+                demo->extension_names[demo->enabled_extension_count++] = VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME;
+                DbgMsg("VK_KHR_dynamic_rendering extension enabled\n");
+            }
+            assert(demo->enabled_extension_count < 64);
+        }
+
         free(device_extensions);
     }
 
@@ -3555,9 +3493,14 @@ static void demo_create_device(struct demo *demo) {
     queues[0].pQueuePriorities = queue_priorities;
     queues[0].flags = 0;
 
+    VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
+        .pNext = NULL,
+        .dynamicRendering = VK_TRUE,
+    };
     VkDeviceCreateInfo device = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pNext = NULL,
+        .pNext = &dynamic_rendering_features,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = queues,
         .enabledLayerCount = 0,
@@ -3729,6 +3672,8 @@ static void demo_init_vk_swapchain(struct demo *demo) {
         GET_DEVICE_PROC_ADDR(demo->device, GetRefreshCycleDurationGOOGLE);
         GET_DEVICE_PROC_ADDR(demo->device, GetPastPresentationTimingGOOGLE);
     }
+    GET_DEVICE_PROC_ADDR(demo->device, CmdBeginRenderingKHR);
+    GET_DEVICE_PROC_ADDR(demo->device, CmdEndRenderingKHR);
 
     vkGetDeviceQueue(demo->device, demo->graphics_queue_family_index, 0, &demo->graphics_queue);
 
