@@ -2,11 +2,11 @@
   "repos" : [
     {
       "name" : "Vulkan-Headers",
-      "url" : "https://github.com/KhronosGroup/Vulkan-Headers.git",
+      "url" : "https://github.com/mikes-lunarg/Vulkan-Headers.git",
       "sub_dir" : "Vulkan-Headers",
       "build_dir" : "Vulkan-Headers/build",
       "install_dir" : "Vulkan-Headers/build/install",
-      "commit" : "d99496fcb1f4aecbeb25c1e70eda0cdee7e1eba5"
+      "commit" : "latest_hpp"
     },
     {
       "name" : "MoltenVK",
