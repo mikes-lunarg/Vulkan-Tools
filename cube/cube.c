@@ -2997,11 +2997,36 @@ static void demo_run_directfb(struct demo *demo) {
     }
 }
 #elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+static void SignalHandler(int id, siginfo_t *info, void *data) {
+    __android_log_print(ANDROID_LOG_INFO, "gfxrecon", "cube: App signal handler abort()");
+    abort();
+}
+
 static void demo_run(struct demo *demo) {
     if (!demo->prepared) return;
 
     demo_draw(demo);
     demo->curFrame++;
+
+    struct sigaction current_sa = {};
+    int result = sigaction(SIGSEGV, NULL, &current_sa);
+    if (result == 0) {
+        if (current_sa.sa_sigaction != SignalHandler) {
+            struct sigaction sa = {};
+            sa.sa_flags = SA_SIGINFO;
+            sigemptyset(&sa.sa_mask);
+            sa.sa_sigaction = SignalHandler;
+
+            result = sigaction(SIGSEGV, &sa, NULL);
+            if (result) {
+                __android_log_print(ANDROID_LOG_INFO, "gfxrecon", "cube: Error installing app signal handler %d", result);
+            } else {
+                __android_log_print(ANDROID_LOG_INFO, "gfxrecon", "cube: Installing app signal handler %d", result);
+            }
+        }
+    } else {
+        __android_log_print(ANDROID_LOG_INFO, "gfxrecon", "cube: Error retreiving signal handler %d", result);
+    }
 }
 #elif defined(VK_USE_PLATFORM_METAL_EXT)
 static void demo_run(struct demo *demo) {
