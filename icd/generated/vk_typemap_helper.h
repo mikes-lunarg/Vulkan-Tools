@@ -4351,6 +4351,50 @@ struct LvlSTypeMap<VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_
     typedef VkRenderingFragmentShadingRateAttachmentInfoKHR Type;
 };
 
+// Map type VkPhysicalDeviceShaderConstantDataFeaturesKHR to id VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CONSTANT_DATA_FEATURES_KHR
+template <>
+struct LvlTypeMap<VkPhysicalDeviceShaderConstantDataFeaturesKHR> {
+    static const VkStructureType kSType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CONSTANT_DATA_FEATURES_KHR;
+};
+
+template <>
+struct LvlSTypeMap<VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CONSTANT_DATA_FEATURES_KHR> {
+    typedef VkPhysicalDeviceShaderConstantDataFeaturesKHR Type;
+};
+
+// Map type VkPhysicalDeviceShaderAbortFeaturesKHR to id VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ABORT_FEATURES_KHR
+template <>
+struct LvlTypeMap<VkPhysicalDeviceShaderAbortFeaturesKHR> {
+    static const VkStructureType kSType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ABORT_FEATURES_KHR;
+};
+
+template <>
+struct LvlSTypeMap<VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ABORT_FEATURES_KHR> {
+    typedef VkPhysicalDeviceShaderAbortFeaturesKHR Type;
+};
+
+// Map type VkDeviceFaultShaderAbortMessageInfoKHR to id VK_STRUCTURE_TYPE_DEVICE_FAULT_SHADER_ABORT_MESSAGE_INFO_KHR
+template <>
+struct LvlTypeMap<VkDeviceFaultShaderAbortMessageInfoKHR> {
+    static const VkStructureType kSType = VK_STRUCTURE_TYPE_DEVICE_FAULT_SHADER_ABORT_MESSAGE_INFO_KHR;
+};
+
+template <>
+struct LvlSTypeMap<VK_STRUCTURE_TYPE_DEVICE_FAULT_SHADER_ABORT_MESSAGE_INFO_KHR> {
+    typedef VkDeviceFaultShaderAbortMessageInfoKHR Type;
+};
+
+// Map type VkPhysicalDeviceShaderAbortPropertiesKHR to id VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ABORT_PROPERTIES_KHR
+template <>
+struct LvlTypeMap<VkPhysicalDeviceShaderAbortPropertiesKHR> {
+    static const VkStructureType kSType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ABORT_PROPERTIES_KHR;
+};
+
+template <>
+struct LvlSTypeMap<VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ABORT_PROPERTIES_KHR> {
+    typedef VkPhysicalDeviceShaderAbortPropertiesKHR Type;
+};
+
 // Map type VkPhysicalDeviceShaderQuadControlFeaturesKHR to id VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_QUAD_CONTROL_FEATURES_KHR
 template <>
 struct LvlTypeMap<VkPhysicalDeviceShaderQuadControlFeaturesKHR> {
@@ -5805,6 +5849,50 @@ struct LvlTypeMap<VkPhysicalDeviceLayeredApiVulkanPropertiesKHR> {
 template <>
 struct LvlSTypeMap<VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_VULKAN_PROPERTIES_KHR> {
     typedef VkPhysicalDeviceLayeredApiVulkanPropertiesKHR Type;
+};
+
+// Map type VkPhysicalDeviceFaultFeaturesKHR to id VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_KHR
+template <>
+struct LvlTypeMap<VkPhysicalDeviceFaultFeaturesKHR> {
+    static const VkStructureType kSType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_KHR;
+};
+
+template <>
+struct LvlSTypeMap<VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_KHR> {
+    typedef VkPhysicalDeviceFaultFeaturesKHR Type;
+};
+
+// Map type VkPhysicalDeviceFaultPropertiesKHR to id VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_PROPERTIES_KHR
+template <>
+struct LvlTypeMap<VkPhysicalDeviceFaultPropertiesKHR> {
+    static const VkStructureType kSType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_PROPERTIES_KHR;
+};
+
+template <>
+struct LvlSTypeMap<VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_PROPERTIES_KHR> {
+    typedef VkPhysicalDeviceFaultPropertiesKHR Type;
+};
+
+// Map type VkDeviceFaultInfoKHR to id VK_STRUCTURE_TYPE_DEVICE_FAULT_INFO_KHR
+template <>
+struct LvlTypeMap<VkDeviceFaultInfoKHR> {
+    static const VkStructureType kSType = VK_STRUCTURE_TYPE_DEVICE_FAULT_INFO_KHR;
+};
+
+template <>
+struct LvlSTypeMap<VK_STRUCTURE_TYPE_DEVICE_FAULT_INFO_KHR> {
+    typedef VkDeviceFaultInfoKHR Type;
+};
+
+// Map type VkDeviceFaultDebugInfoKHR to id VK_STRUCTURE_TYPE_DEVICE_FAULT_DEBUG_INFO_KHR
+template <>
+struct LvlTypeMap<VkDeviceFaultDebugInfoKHR> {
+    static const VkStructureType kSType = VK_STRUCTURE_TYPE_DEVICE_FAULT_DEBUG_INFO_KHR;
+};
+
+template <>
+struct LvlSTypeMap<VK_STRUCTURE_TYPE_DEVICE_FAULT_DEBUG_INFO_KHR> {
+    typedef VkDeviceFaultDebugInfoKHR Type;
 };
 
 // Map type VkMemoryBarrierAccessFlags3KHR to id VK_STRUCTURE_TYPE_MEMORY_BARRIER_ACCESS_FLAGS_3_KHR
@@ -13506,21 +13594,21 @@ struct LvlSTypeMap<VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT>
 // Header "base class" for pNext chain traversal
 struct LvlGenericHeader {
     VkStructureType sType;
-    const LvlGenericHeader *pNext;
+    const LvlGenericHeader* pNext;
 };
 struct LvlGenericModHeader {
     VkStructureType sType;
-    LvlGenericModHeader *pNext;
+    LvlGenericModHeader* pNext;
 };
 
 // Find an entry of the given type in the pNext chain
 template <typename T>
-const T *lvl_find_in_chain(const void *next) {
-    const LvlGenericHeader *current = reinterpret_cast<const LvlGenericHeader *>(next);
-    const T *found = nullptr;
+const T* lvl_find_in_chain(const void* next) {
+    const LvlGenericHeader* current = reinterpret_cast<const LvlGenericHeader*>(next);
+    const T* found = nullptr;
     while (current) {
         if (LvlTypeMap<T>::kSType == current->sType) {
-            found = reinterpret_cast<const T *>(current);
+            found = reinterpret_cast<const T*>(current);
             current = nullptr;
         } else {
             current = current->pNext;
@@ -13530,12 +13618,12 @@ const T *lvl_find_in_chain(const void *next) {
 }
 // Find an entry of the given type in the pNext chain
 template <typename T>
-T *lvl_find_mod_in_chain(void *next) {
-    LvlGenericModHeader *current = reinterpret_cast<LvlGenericModHeader *>(next);
-    T *found = nullptr;
+T* lvl_find_mod_in_chain(void* next) {
+    LvlGenericModHeader* current = reinterpret_cast<LvlGenericModHeader*>(next);
+    T* found = nullptr;
     while (current) {
         if (LvlTypeMap<T>::kSType == current->sType) {
-            found = reinterpret_cast<T *>(current);
+            found = reinterpret_cast<T*>(current);
             current = nullptr;
         } else {
             current = current->pNext;
@@ -13546,7 +13634,7 @@ T *lvl_find_mod_in_chain(void *next) {
 
 // Init the header of an sType struct with pNext
 template <typename T>
-T lvl_init_struct(void *p_next) {
+T lvl_init_struct(void* p_next) {
     T out = {};
     out.sType = LvlTypeMap<T>::kSType;
     out.pNext = p_next;
